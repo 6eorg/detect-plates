@@ -201,7 +201,7 @@ def extract_specific_region(image):
     start_row = int(height * 0.4)
     end_row = int(height * 0.8)
     start_col = int(width * 0.14)
-    end_col = int(width * 0.5)
+    end_col = int(width * 0.9)
 
     # Extract the region from the image
     extracted_region = image[start_row:end_row, start_col:end_col]
@@ -225,7 +225,7 @@ def extract_text_from_image(image):
 
         # Define the whitelist of characters
         custom_config = r'-c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.- --psm 6'
-
+        custom_config = None
         # Extract text using pytesseract with the custom configuration
         extracted_text = pytesseract.image_to_string(image, config=custom_config)
 
@@ -381,11 +381,28 @@ def detect_motion(video_path=0): #when no input it takes the webcam !
             cv2.imshow("extracted region",extracted_region)
 
             ### TEST FOR WHTE
+            """
             white_img = white_plate.apply_treshhold(extracted_region)
             white_text = extract_text_from_image(white_img)
-            print("text from white: ", white_text)
+            if white_text != "":
+                print("text from white: ", white_text)
+                cleaned = clean_up.clean_swiss_license_plate(white_text)
+                print("text from white cleaned: ",cleaned )
+                collected_plate_nrs.add(cleaned)
+            
+            """
 
             ##END TEST FOR WHITE
+
+            ## TEST READ DIRECT FROM UNTRANSFORMED IMAGE
+            text_from_extracted = extract_text_from_image(extracted_region)
+            if text_from_extracted != "":
+                print("text from extracted", text_from_extracted)
+                cleaned = clean_up.clean_swiss_license_plate(text_from_extracted)
+                print("text from extracted cleaned: ", cleaned )
+                collected_plate_nrs.add(cleaned)
+
+            ## END TEST
 
 
             # Detect the corners of the license plate
@@ -412,7 +429,7 @@ def detect_motion(video_path=0): #when no input it takes the webcam !
                 ## read with easy_ocr
             #    ocr_easy_ocr.extract_with_easy_ocr(corrected)
 
-                showThat = True
+                showThat = False
                 if showThat:
                     cv2.imshow(text, transformed_image)
                     cv2.waitKey(0)
@@ -440,6 +457,8 @@ def detect_motion(video_path=0): #when no input it takes the webcam !
 
 # Path to the video file
 video_path = 'video1.mp4'
+collected_plate_nrs = set()
 
 # Call the motion detection function
 detect_motion(video_path)
+print("collected: ", collected_plate_nrs)
