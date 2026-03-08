@@ -3,7 +3,7 @@ import pytesseract
 import numpy as np
 import clean_up
 import white_plate
-
+import contour_finding_methods
 # Set the path to the Tesseract executable
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
@@ -266,6 +266,27 @@ def prepare_image_for_ocr(image):
 
     return binary_image
 
+def enhance_contrast(image):
+    """
+    Sharpens the input image to improve OCR readability using Tesseract.
+
+    Parameters:
+    image (numpy.ndarray): Input image in BGR format.
+
+    Returns:
+    numpy.ndarray: Sharpened image.
+    """
+
+    # Define a sharpening kernel
+    kernel = np.array([[0, -1, 0],
+                       [-1, 5,-1],
+                       [0, -1, 0]])
+
+    # Apply the sharpening kernel to the image
+    sharpened = cv2.filter2D(image, -1, kernel)
+
+    return sharpened
+
 
 
 def merge_images(large_image, small_image_1, small_image_2, x, y, w, h, text=None):
@@ -330,7 +351,7 @@ def merge_images(large_image, small_image_1, small_image_2, x, y, w, h, text=Non
     return large_image
 
 # Function to detect motion in a video and frame each object separately
-def detect_motion(video_path=0): #when no input it takes the webcam !
+def detect_motion(video_path=0, contour_finding_method=None): #when no input it takes the webcam !
     # Open the video file
     cap = cv2.VideoCapture(video_path)
 
@@ -339,9 +360,6 @@ def detect_motion(video_path=0): #when no input it takes the webcam !
     ret, frame2 = cap.read()
 
     while cap.isOpened():
-        # Compute the absolute difference between the current frame and the next frame
-        diff = cv2.absdiff(frame1, frame2)
-        gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
 
         #used to merge a nice picture
         prepared_image = None
@@ -349,18 +367,8 @@ def detect_motion(video_path=0): #when no input it takes the webcam !
         text_to_display = None
         x,y,w,h = None, None,None,None
 
-
-        # Blur the image to reduce noise
-        blur = cv2.GaussianBlur(gray, (5, 5), 0)
-
-        # Threshold the image to create a binary image
-        _, thresh = cv2.threshold(blur, 20, 255, cv2.THRESH_BINARY)
-
-        # Dilate the threshold image to fill in holes
-        dilated = cv2.dilate(thresh, None, iterations=3)
-
         # Find contours of the moving objects
-        contours, _ = cv2.findContours(dilated, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = contour_finding_method(frame1, frame2)
 
         for contour in contours:
             if cv2.contourArea(contour) < 40000:  # Filter small contours
@@ -396,13 +404,19 @@ def detect_motion(video_path=0): #when no input it takes the webcam !
 
             ## TEST READ DIRECT FROM UNTRANSFORMED IMAGE
             text_from_extracted = extract_text_from_image(extracted_region)
+
             if text_from_extracted != "":
                 print("text from extracted", text_from_extracted)
                 cleaned = clean_up.clean_swiss_license_plate(text_from_extracted)
-                print("text from extracted cleaned: ", cleaned )
+                #print("text from extracted cleaned: ", cleaned )
                 collected_plate_nrs.add(cleaned)
 
             ## END TEST
+
+            #TEST WITH ENHANCED CONTRAST
+            text_with_more_contrast = extract_text_from_image(enhance_contrast(extracted_region))
+            if text_with_more_contrast != "":
+                print("extracted from more contrast", text_with_more_contrast)
 
 
             # Detect the corners of the license plate
@@ -411,18 +425,18 @@ def detect_motion(video_path=0): #when no input it takes the webcam !
             # Apply perspective transformation to correct the license plate orientation
             transformed_image = transform_perspective(extracted_region, corners)
 
-
             if transformed_image is not None:
+                print("transformed found")
                 corrected = check_and_correct_orientation(transformed_image)
                 cv2.imshow("turned", corrected)
                 prepared_image = prepare_image_for_ocr(corrected)
                 cv2.imshow("prepared_image", prepared_image)
 
                 text = extract_text_from_image(prepared_image)
-                print("prepared:", text.rstrip('\n'))
+              #  print("prepared:", text.rstrip('\n'))
                 print("prepared - cleaned:", clean_up.clean_swiss_license_plate(text))
                 text = extract_text_from_image(corrected)
-                print("corrected:", text.rstrip('\n'))
+              #  print("corrected:", text.rstrip('\n'))
                 print("corrected - cleaned", clean_up.clean_swiss_license_plate(text))
                 text_to_display = clean_up.clean_swiss_license_plate(text)
 
@@ -460,5 +474,5 @@ video_path = 'video1.mp4'
 collected_plate_nrs = set()
 
 # Call the motion detection function
-detect_motion(video_path)
+detect_motion(video_path, contour_finding_method=contour_finding_methods.find_contour_method_1)
 print("collected: ", collected_plate_nrs)
